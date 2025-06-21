@@ -1,39 +1,61 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
+import jsPDF from 'jspdf';
 
 const Results = () => {
   const { state } = useLocation();
-  const { name, score, total, answers } = state;
+  const { name, score, total, answers = [], questions = [], topic } = state || {};
+
+  // Fill in unanswered questions
+  const completeAnswers = questions.map((q, i) => {
+    return answers[i] || {
+      question: q.question,
+      selected: "Skipped",
+      correct: q.answer,
+      isCorrect: false,
+      type: q.type
+    };
+  });
 
   const downloadResults = () => {
-    const content = `
-Quiz Results for ${name}
-Topic: ${state.questions[0]?.question.substring(0, 20)}...
-Score: ${score}/${total}
-Details:
+    const doc = new jsPDF();
+    let y = 10;
 
-${answers.map((ans, i) => `
-Q${i+1}: ${ans.question}
-Your Answer: ${ans.selected}
-Correct Answer: ${ans.correct}
-Status: ${ans.isCorrect ? '✅ Correct' : '❌ Incorrect'}
-`).join('\n')}
-`.trim();
+    doc.setFontSize(14);
+    doc.text(`Quiz Results for ${name || "Unknown"}`, 10, y); y += 10;
+    doc.text(`Topic: ${topic || "Unknown Topic"}`, 10, y); y += 10;
+    doc.text(`Score: ${score ?? 0} / ${total ?? 0}`, 10, y); y += 10;
 
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${name}_quiz_results.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    y += 10;
+    doc.setFontSize(12);
+    completeAnswers.forEach((ans, i) => {
+      const lines = [
+        `Q${i + 1}: ${ans.question || "Missing question"}`,
+        `Your Answer: ${ans.selected || "Skipped"}`,
+        `Correct Answer: ${ans.correct || "Not available"}`,
+        `Status: ${ans.isCorrect ? "✅ Correct" : "❌ Incorrect"}`
+      ];
+
+      lines.forEach(line => {
+        if (y > 280) {
+          doc.addPage();
+          y = 10;
+        }
+        doc.text(line, 10, y);
+        y += 8;
+      });
+
+      y += 5; // space after each question
+    });
+
+    doc.save(`${name || 'quiz'}_results.pdf`);
   };
 
   return (
     <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', color: '#fff' }}>
       <h2>🎉 Quiz Completed!</h2>
-      <h3>{name}, your score is:</h3>
-      <h1>{score}/{total}</h1>
+      <h3>{name ? `${name}, your score is:` : "Your quiz results"}</h3>
+      <h1>{score ?? 0} / {total ?? 0}</h1>
 
       <button onClick={downloadResults} style={{
         padding: '0.7rem 1.5rem',
@@ -44,19 +66,27 @@ Status: ${ans.isCorrect ? '✅ Correct' : '❌ Incorrect'}
         borderRadius: '8px',
         cursor: 'pointer'
       }}>
-        📥 Download Results
+        📄 Download PDF Results
       </button>
 
       <div style={{ marginTop: '2rem' }}>
         <h3>Review Answers</h3>
-        {answers.map((ans, i) => (
-          <div key={i} style={{ marginBottom: '1rem', borderBottom: '1px solid #ccc', paddingBottom: '0.5rem' }}>
-            <strong>Q{i+1}:</strong> {ans.question}<br />
-            <strong>Your Answer:</strong> {ans.selected} <br />
-            <strong>Correct Answer:</strong> {ans.correct} <br />
-            <strong>Status:</strong> {ans.isCorrect ? '✅ Correct' : '❌ Incorrect'}
-          </div>
-        ))}
+        {completeAnswers.length === 0 ? (
+          <p>No answers were recorded.</p>
+        ) : (
+          completeAnswers.map((ans, i) => (
+            <div key={i} style={{
+              marginBottom: '1rem',
+              borderBottom: '1px solid #ccc',
+              paddingBottom: '0.5rem'
+            }}>
+              <strong>Q{i + 1}:</strong> {ans.question || "Missing question"}<br />
+              <strong>Your Answer:</strong> {ans.selected || <span style={{ color: 'orange' }}>Skipped</span>} <br />
+              <strong>Correct Answer:</strong> {ans.correct || "Not available"} <br />
+              <strong>Status:</strong> {ans.isCorrect ? '✅ Correct' : '❌ Incorrect'}
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

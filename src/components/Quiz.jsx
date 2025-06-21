@@ -82,30 +82,30 @@ Return a valid JSON array. No explanations. No markdown.
   }, [topic, difficulty, numQuestions]);
 
   const handleSaveAnswer = () => {
-    const updatedAnswers = [...userAnswers];
-    const current = questions[currentIndex];
+  const updatedAnswers = [...userAnswers];
+  const current = questions[currentIndex];
 
-    if (current.type === "MCQ") {
-      updatedAnswers[currentIndex] = {
-        question: current.question,
-        type: current.type,
-        selected: current.options[selectedOption],
-        correct: current.answer,
-        isCorrect: current.options[selectedOption]?.toLowerCase().trim() === current.answer.toLowerCase().trim()
-      };
-    } else if (current.type === "FIB") {
-      const userAns = fibAnswer.trim();
-      updatedAnswers[currentIndex] = {
-        question: current.question,
-        type: current.type,
-        selected: userAns,
-        correct: current.answer,
-        isCorrect: userAns.toLowerCase() === current.answer.toLowerCase()
-      };
-    }
+  let selected = null;
+  let isCorrect = false;
 
-    setUserAnswers(updatedAnswers);
+  if (current.type === "MCQ") {
+    selected = selectedOption !== null ? current.options[selectedOption] : 'Skipped';
+    isCorrect = selected.toLowerCase() === current.answer.toLowerCase();
+  } else if (current.type === "FIB") {
+    selected = fibAnswer.trim() || 'Skipped';
+    isCorrect = selected.toLowerCase() === current.answer.toLowerCase();
+  }
+
+  updatedAnswers[currentIndex] = {
+    question: current.question,
+    type: current.type,
+    selected,
+    correct: current.answer,
+    isCorrect
   };
+
+  setUserAnswers(updatedAnswers);
+};
 
   const handleNext = () => {
     if (selectedOption !== null || fibAnswer !== '') handleSaveAnswer();
@@ -129,18 +129,33 @@ Return a valid JSON array. No explanations. No markdown.
   };
 
   const handleSubmit = () => {
-    if (selectedOption !== null || fibAnswer !== '') handleSaveAnswer();
-    const finalScore = userAnswers.filter(ans => ans?.isCorrect).length;
-    navigate('/results', {
-      state: {
-        name,
-        score: finalScore,
-        total: questions.length,
-        answers: userAnswers,
-        questions
-      }
-    });
-  };
+  // Ensure all answers are saved
+  const updatedAnswers = [...userAnswers];
+  questions.forEach((q, i) => {
+    if (updatedAnswers[i] === null) {
+      updatedAnswers[i] = {
+        question: q.question,
+        selected: "Skipped",
+        correct: q.answer,
+        isCorrect: false,
+        type: q.type
+      };
+    }
+  });
+
+  const finalScore = updatedAnswers.filter(ans => ans.isCorrect).length;
+  
+  navigate('/results', {
+    state: {
+      name,
+      topic,
+      score: finalScore,
+      total: questions.length,
+      answers: updatedAnswers,
+      questions
+    }
+  });
+};
 
   if (loading)
     return <h2 style={{ textAlign: 'center' }}>🧠 Generating your quiz...</h2>;
