@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import './Quiz.css';
 
 const Quiz = () => {
   const { state } = useLocation();
@@ -17,9 +18,9 @@ const Quiz = () => {
 
   useEffect(() => {
     const fetchQuestions = async () => {
-  setLoading(true);
+      setLoading(true);
 
-  const prompt = `
+      const prompt = `
 Generate ${numQuestions} ${difficulty}-level quiz questions about "${topic}".
 Each question should be in this format:
 {
@@ -30,53 +31,53 @@ Each question should be in this format:
 }
 Only include FIB questions if level is Expert.
 Return a valid JSON array. No explanations. No markdown.
-  `;
+      `;
 
-  try {
-    const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+      try {
+        const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
-        })
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }]
+            })
+          }
+        );
+
+        const data = await response.json();
+        let raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        // Remove any code block markers or markdown formatting
+        raw = raw.replace(/json|/g, '').trim();
+
+        // Find and extract the first valid JSON array in the response
+        const jsonStart = raw.indexOf('[');
+        const jsonEnd = raw.lastIndexOf(']') + 1;
+        const jsonText = raw.slice(jsonStart, jsonEnd);
+
+        let parsed = [];
+        try {
+          parsed = JSON.parse(jsonText);
+        } catch (e) {
+          console.error("🚨 JSON parse error:\n", e);
+          console.log("💬 Raw response:\n", raw);
+          alert('Error parsing Gemini response. Try refreshing.');
+          return;
+        }
+
+        const filtered = parsed.filter(q => q.type !== "FIB" || difficulty === "Expert");
+        setQuestions(filtered);
+        setUserAnswers(new Array(filtered.length).fill(null));
+      } catch (err) {
+        console.error("Failed to fetch questions:", err);
+        alert("Failed to load questions. Check API or connection.");
+      } finally {
+        setLoading(false);
       }
-    );
-
-    const data = await response.json();
-    let raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    // Remove any code block markers or markdown formatting
-    raw = raw.replace(/```json|```/g, '').trim();
-
-    // Find and extract the first valid JSON array in the response
-    const jsonStart = raw.indexOf('[');
-    const jsonEnd = raw.lastIndexOf(']') + 1;
-    const jsonText = raw.slice(jsonStart, jsonEnd);
-
-    let parsed = [];
-    try {
-      parsed = JSON.parse(jsonText);
-    } catch (e) {
-      console.error("🚨 JSON parse error:\n", e);
-      console.log("💬 Raw response:\n", raw);
-      alert('Error parsing Gemini response. Try refreshing.');
-      return;
-    }
-
-    const filtered = parsed.filter(q => q.type !== "FIB" || difficulty === "Expert");
-    setQuestions(filtered);
-    setUserAnswers(new Array(filtered.length).fill(null));
-  } catch (err) {
-    console.error("Failed to fetch questions:", err);
-    alert("Failed to load questions. Check API or connection.");
-  } finally {
-    setLoading(false);
-  }
-};
+    };
 
     fetchQuestions();
   }, [topic, difficulty, numQuestions]);
@@ -85,18 +86,22 @@ Return a valid JSON array. No explanations. No markdown.
   const updatedAnswers = [...userAnswers];
   const current = questions[currentIndex];
 
-  let selected = null;
+  let selected = "Skipped";
   let isCorrect = false;
 
   if (current.type === "MCQ") {
-    selected = selectedOption !== null ? current.options[selectedOption] : 'Skipped';
-    isCorrect = selected.toLowerCase() === current.answer.toLowerCase();
+    if (selectedOption !== null) {
+      selected = current.options[selectedOption];
+      isCorrect = selected.toLowerCase() === current.answer.toLowerCase();
+    }
   } else if (current.type === "FIB") {
-    selected = fibAnswer.trim() || 'Skipped';
-    isCorrect = selected.toLowerCase() === current.answer.toLowerCase();
+    if (fibAnswer.trim() !== '') {
+      selected = fibAnswer.trim();
+      isCorrect = selected.toLowerCase() === current.answer.toLowerCase();
+    }
   }
 
-  updatedAnswers[currentIndex] = {
+  const savedAnswer = {
     question: current.question,
     type: current.type,
     selected,
@@ -104,8 +109,12 @@ Return a valid JSON array. No explanations. No markdown.
     isCorrect
   };
 
+  updatedAnswers[currentIndex] = savedAnswer;
   setUserAnswers(updatedAnswers);
+  return { updatedAnswers, savedAnswer };
 };
+
+
 
   const handleNext = () => {
     if (selectedOption !== null || fibAnswer !== '') handleSaveAnswer();
@@ -129,111 +138,124 @@ Return a valid JSON array. No explanations. No markdown.
   };
 
   const handleSubmit = () => {
-  // Ensure all answers are saved
-  const updatedAnswers = [...userAnswers];
-  questions.forEach((q, i) => {
-    if (updatedAnswers[i] === null) {
-      updatedAnswers[i] = {
-        question: q.question,
+  const { updatedAnswers, savedAnswer } = handleSaveAnswer();
+
+  console.log("🌟 Final saved answer for current question:", savedAnswer);
+
+  // Fill in any missing answers as skipped
+  const finalAnswers = updatedAnswers.map((ans, i) => {
+    if (ans === null) {
+      return {
+        question: questions[i].question,
         selected: "Skipped",
-        correct: q.answer,
+        correct: questions[i].answer,
         isCorrect: false,
-        type: q.type
+        type: questions[i].type
       };
     }
+    return ans;
   });
 
-  const finalScore = updatedAnswers.filter(ans => ans.isCorrect).length;
-  
+  const finalScore = finalAnswers.filter(ans => ans.isCorrect).length;
+
   navigate('/results', {
     state: {
       name,
       topic,
       score: finalScore,
       total: questions.length,
-      answers: updatedAnswers,
+      answers: finalAnswers,
       questions
     }
   });
 };
 
+
+
+
   if (loading)
-    return <h2 style={{ textAlign: 'center' }}>🧠 Generating your quiz...</h2>;
+    return <div className="loading-message">🧠 Generating your quiz...</div>;
+  
   if (questions.length === 0)
-    return <h2>No questions generated.</h2>;
+    return <div className="error-message">No questions generated.</div>;
 
   const current = questions[currentIndex];
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', color: '#fff' }}> 
-      <h2>Welcome, {name}</h2>
-      <div style={{ marginBottom: '1rem' }}>
-        <label>Jump to Question: </label>
-        <select value={currentIndex} onChange={handleJumpTo}>
-          {questions.map((_, idx) => (
-            <option key={idx} value={idx}>Q{idx + 1}</option>
-          ))}
-        </select>
+    <div className="quiz-container">
+      <div className="quiz-header">
+        <h2>Welcome, {name}</h2>
+        <div className="question-nav">
+          <label>Jump to Question: </label>
+          <select className="question-select" value={currentIndex} onChange={handleJumpTo}>
+            {questions.map((_, idx) => (
+              <option key={idx} value={idx}>Q{idx + 1}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <h3>Question {currentIndex + 1} / {questions.length}</h3>
-      <p style={{ marginBottom: '1rem' }}>{current.question}</p>
+      <div className="question-content">
+        <h3 className="question-counter">Question {currentIndex + 1} / {questions.length}</h3>
+        <p className="question-text">{current.question}</p>
 
-      {current.type === 'MCQ' && current.options.map((opt, idx) => (
-        <div key={idx} style={{ margin: '0.5rem 0' }}>
-          <label>
-            <input
-              type="radio"
-              name="option"
-              checked={selectedOption === idx}
-              onChange={() => setSelectedOption(idx)}
-            />
-            {" "}
-            {String.fromCharCode(65 + idx)}. {opt}
-          </label>
-        </div>
-      ))}
+        {current.type === 'MCQ' && (
+          <div className="options-container">
+            {current.options.map((opt, idx) => (
+              <label key={idx} className="option-label">
+                <input
+                  className="option-input"
+                  type="radio"
+                  name="option"
+                  checked={selectedOption === idx}
+                  onChange={() => setSelectedOption(idx)}
+                />
+                {String.fromCharCode(65 + idx)}. {opt}
+              </label>
+            ))}
+          </div>
+        )}
 
-      {current.type === 'FIB' && (
-        <div style={{ margin: '1rem 0' }}>
+        {current.type === 'FIB' && (
           <input
             type="text"
+            className="fib-input"
             placeholder="Type your answer here..."
             value={fibAnswer}
             onChange={(e) => setFibAnswer(e.target.value)}
-            style={{ width: '100%', padding: '0.5rem', fontSize: '1rem' }}
           />
-        </div>
-      )}
+        )}
+      </div>
 
-      <div style={{ marginTop: '1.5rem' }}>
-        <button onClick={handlePrevious} disabled={currentIndex === 0} style={btnStyle}>
-          ⬅️ Previous
+      <div className="button-container">
+        <button 
+          onClick={handlePrevious} 
+          disabled={currentIndex === 0} 
+          className="btn btn-previous"
+        >
+          ⬅ Previous
         </button>
-        {!isLastQuestion && (
-          <button onClick={handleNext} disabled={selectedOption === null && current.type === "MCQ"} style={btnStyle}>
-            Next ➡️
-          </button>
-        )}
-        {isLastQuestion && (
-          <button onClick={handleSubmit} style={btnStyle}>
-            ✅ Submit Quiz
-          </button>
-        )}
+        {!isLastQuestion ? (
+  <button 
+    onClick={handleNext} 
+    disabled={selectedOption === null && current.type === "MCQ"} 
+    className="btn btn-next"
+  >
+    Next ➡
+  </button>
+) : (
+  <button 
+    onClick={handleSubmit} 
+    disabled={current.type === "MCQ" && selectedOption === null} 
+    className="btn btn-submit"
+  >
+    ✅ Submit Quiz
+  </button>
+)}
+
       </div>
     </div>
   );
-};
-
-const btnStyle = {
-  marginRight: '1rem',
-  padding: '0.6rem 1.2rem',
-  fontSize: '1rem',
-  borderRadius: '8px',
-  border: 'none',
-  cursor: 'pointer',
-  background: '#3B82F6',
-  color: '#fff'
 };
 
 export default Quiz;
