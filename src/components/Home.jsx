@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const Home = () => {
   // Form state
@@ -7,6 +8,7 @@ const Home = () => {
   const [numQuestions, setNumQuestions] = useState(10);
   const [difficulty, setDifficulty] = useState('Beginner');
   const canvasRef = useRef(null);
+  const navigate = useNavigate();
 
   // Starfield animation
   useEffect(() => {
@@ -74,7 +76,14 @@ const Home = () => {
   // Form submission
   const handleSubmit = (e) => {
     e.preventDefault();
-    alert(`Quiz starting for ${name} on ${topic} (${numQuestions} ${difficulty}-level questions)`);
+    navigate('/quiz', {
+      state: {
+      name,
+      topic,
+      numQuestions,
+      difficulty
+      }
+    });
   };
 
   return (
@@ -173,7 +182,7 @@ const Home = () => {
               placeholder="Enter quiz topic"
               required
               style={{
-                width: '100%',
+                width: '93.5%',
                 padding: '0.8rem 1rem',
                 borderRadius: '8px',
                 border: 'none',
