@@ -37,7 +37,7 @@ Return a valid JSON array. No explanations. No markdown.
         const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
         const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${API_KEY}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -50,10 +50,7 @@ Return a valid JSON array. No explanations. No markdown.
         const data = await response.json();
         let raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-        // Remove any code block markers or markdown formatting
-        raw = raw.replace(/json|/g, '').trim();
-
-        // Find and extract the first valid JSON array in the response
+        raw = raw.replace(/json|```/g, '').trim();
         const jsonStart = raw.indexOf('[');
         const jsonEnd = raw.lastIndexOf(']') + 1;
         const jsonText = raw.slice(jsonStart, jsonEnd);
@@ -83,38 +80,36 @@ Return a valid JSON array. No explanations. No markdown.
   }, [topic, difficulty, numQuestions]);
 
   const handleSaveAnswer = () => {
-  const updatedAnswers = [...userAnswers];
-  const current = questions[currentIndex];
+    const updatedAnswers = [...userAnswers];
+    const current = questions[currentIndex];
 
-  let selected = "Skipped";
-  let isCorrect = false;
+    let selected = "Skipped";
+    let isCorrect = false;
 
-  if (current.type === "MCQ") {
-    if (selectedOption !== null) {
-      selected = current.options[selectedOption];
-      isCorrect = selected.toLowerCase() === current.answer.toLowerCase();
+    if (current.type === "MCQ") {
+      if (selectedOption !== null) {
+        selected = current.options[selectedOption];
+        isCorrect = selected.toLowerCase() === current.answer.toLowerCase();
+      }
+    } else if (current.type === "FIB") {
+      if (fibAnswer.trim() !== '') {
+        selected = fibAnswer.trim();
+        isCorrect = selected.toLowerCase() === current.answer.toLowerCase();
+      }
     }
-  } else if (current.type === "FIB") {
-    if (fibAnswer.trim() !== '') {
-      selected = fibAnswer.trim();
-      isCorrect = selected.toLowerCase() === current.answer.toLowerCase();
-    }
-  }
 
-  const savedAnswer = {
-    question: current.question,
-    type: current.type,
-    selected,
-    correct: current.answer,
-    isCorrect
+    const savedAnswer = {
+      question: current.question,
+      type: current.type,
+      selected,
+      correct: current.answer,
+      isCorrect
+    };
+
+    updatedAnswers[currentIndex] = savedAnswer;
+    setUserAnswers(updatedAnswers);
+    return { updatedAnswers, savedAnswer };
   };
-
-  updatedAnswers[currentIndex] = savedAnswer;
-  setUserAnswers(updatedAnswers);
-  return { updatedAnswers, savedAnswer };
-};
-
-
 
   const handleNext = () => {
     if (selectedOption !== null || fibAnswer !== '') handleSaveAnswer();
@@ -138,48 +133,49 @@ Return a valid JSON array. No explanations. No markdown.
   };
 
   const handleSubmit = () => {
-  const { updatedAnswers, savedAnswer } = handleSaveAnswer();
+    const { updatedAnswers, savedAnswer } = handleSaveAnswer();
 
-  console.log("🌟 Final saved answer for current question:", savedAnswer);
+    console.log("🌟 Final saved answer for current question:", savedAnswer);
 
-  // Fill in any missing answers as skipped
-  const finalAnswers = updatedAnswers.map((ans, i) => {
-    if (ans === null) {
-      return {
-        question: questions[i].question,
-        selected: "Skipped",
-        correct: questions[i].answer,
-        isCorrect: false,
-        type: questions[i].type
-      };
-    }
-    return ans;
-  });
+    const finalAnswers = updatedAnswers.map((ans, i) => {
+      if (ans === null) {
+        return {
+          question: questions[i].question,
+          selected: "Skipped",
+          correct: questions[i].answer,
+          isCorrect: false,
+          type: questions[i].type
+        };
+      }
+      return ans;
+    });
 
-  const finalScore = finalAnswers.filter(ans => ans.isCorrect).length;
+    const finalScore = finalAnswers.filter(ans => ans.isCorrect).length;
 
-  navigate('/results', {
-    state: {
-      name,
-      topic,
-      score: finalScore,
-      total: questions.length,
-      answers: finalAnswers,
-      questions
-    }
-  });
-};
-
-
-
+    navigate('/results', {
+      state: {
+        name,
+        topic,
+        score: finalScore,
+        total: questions.length,
+        answers: finalAnswers,
+        questions
+      }
+    });
+  };
 
   if (loading)
     return <div className="loading-message">🧠 Generating your quiz...</div>;
-  
+
   if (questions.length === 0)
     return <div className="error-message">No questions generated.</div>;
 
   const current = questions[currentIndex];
+
+  // Function to clean option labels like "A) Forest" => "Forest"
+  const cleanOption = (option) => {
+    return option.replace(/^[A-D][\).:\-]\s*/, '').trim();
+  };
 
   return (
     <div className="quiz-container">
@@ -210,7 +206,7 @@ Return a valid JSON array. No explanations. No markdown.
                   checked={selectedOption === idx}
                   onChange={() => setSelectedOption(idx)}
                 />
-                {String.fromCharCode(65 + idx)}. {opt}
+                {String.fromCharCode(65 + idx)}. {cleanOption(opt)}
               </label>
             ))}
           </div>
@@ -228,31 +224,30 @@ Return a valid JSON array. No explanations. No markdown.
       </div>
 
       <div className="button-container">
-        <button 
-          onClick={handlePrevious} 
-          disabled={currentIndex === 0} 
+        <button
+          onClick={handlePrevious}
+          disabled={currentIndex === 0}
           className="btn btn-previous"
         >
           ⬅ Previous
         </button>
         {!isLastQuestion ? (
-  <button 
-    onClick={handleNext} 
-    disabled={selectedOption === null && current.type === "MCQ"} 
-    className="btn btn-next"
-  >
-    Next ➡
-  </button>
-) : (
-  <button 
-    onClick={handleSubmit} 
-    disabled={current.type === "MCQ" && selectedOption === null} 
-    className="btn btn-submit"
-  >
-    ✅ Submit Quiz
-  </button>
-)}
-
+          <button
+            onClick={handleNext}
+            disabled={selectedOption === null && current.type === "MCQ"}
+            className="btn btn-next"
+          >
+            Next ➡
+          </button>
+        ) : (
+          <button
+            onClick={handleSubmit}
+            disabled={current.type === "MCQ" && selectedOption === null}
+            className="btn btn-submit"
+          >
+            ✅ Submit Quiz
+          </button>
+        )}
       </div>
     </div>
   );
