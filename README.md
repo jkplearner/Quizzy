@@ -20,7 +20,7 @@ An AI-powered quiz app that generates dynamic quizzes based on user-selected top
 
 | Frontend          | Backend/API Integration     |
 |-------------------|-----------------------------|
-| React (Vite)      | Google Gemini 1.5 Flash API |
+| React (Vite)      | Google Gemini 2.5 Pro API |
 | Tailwind CSS      | Node.js (internal logic)    |
 | React Router DOM  | Environment Variables (.env)|
 | Vercel Hosting    | JSON Parsing + State Mgmt   |
